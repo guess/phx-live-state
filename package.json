@@ -37,6 +37,7 @@
   "dependencies": {
     "json-joy": "^1.18.1",
     "lit": "^2.2.6",
+    "phoenix": "git+https://github.com/guess/phoenix-js.git",
     "reflect-metadata": "^0.1.13",
     "subscript": "^7.4.6",
     "wc-context": "1.0.0"

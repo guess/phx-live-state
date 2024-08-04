@@ -72,14 +72,14 @@ export type LiveStatePatch = {
  * received, will be dispatched as a CustomEvent of the same name with the payload
  * from the channel event becoming the `detail` property.
  */
-export class LiveState implements EventTarget {
+export class LiveState {
   config: LiveStateConfig;
   channel: Channel;
   socket: Socket;
   state: any;
   stateVersion: number;
   connected: boolean = false;
-  eventTarget: EventTarget;
+  eventListeners: { [key: string]: Function[] } = {};
 
   constructor(config: LiveStateConfig) {
     this.config = config;
@@ -92,7 +92,6 @@ export class LiveState implements EventTarget {
       }
     );
     this.channel = this.socket.channel(this.config.topic, this.config.params);
-    this.eventTarget = new EventTarget();
   }
 
   /** connect to socket and join channel. will do nothing if already connected */
@@ -127,56 +126,51 @@ export class LiveState implements EventTarget {
    * other events, additionally call `channel.on` to receive the event
    * over the channel, which will then be dispatched.
    */
-  addEventListener(type, listener, options?) {
-    this.eventTarget.addEventListener(type, listener, options);
+  addEventListener(type: string, listener: Function) {
+    if (!this.eventListeners[type]) {
+      this.eventListeners[type] = [];
+    }
+    this.eventListeners[type].push(listener);
     if (!type.startsWith("livestate-")) {
       this.channel?.on(type, (payload) => {
-        this.eventTarget.dispatchEvent(
-          new CustomEvent(type, { detail: payload })
-        );
+        this.emit(type, { detail: payload });
       });
     }
   }
 
-  removeEventListener(type, listener, options?) {
-    return this.eventTarget.removeEventListener(type, listener, options);
+  removeEventListener(type: string, listener: Function) {
+    if (this.eventListeners[type]) {
+      this.eventListeners[type] = this.eventListeners[type].filter(l => l !== listener);
+    }
   }
 
-  /** @deprecated */
-  subscribe(subscriber: Function) {
-    this.addEventListener("livestate-change", subscriber);
-  }
-
-  /** @deprecated */
-  unsubscribe(subscriber) {
-    this.removeEventListener("livestate-change", subscriber);
+  emit(type: string, event: any) {
+    if (this.eventListeners[type]) {
+      this.eventListeners[type].forEach(listener => listener(event));
+    }
   }
 
   emitServerError(error) {
-    this.eventTarget.dispatchEvent(
-      new CustomEvent<LiveStateError>("livestate-error", { detail: error })
-    );
+    this.emit("livestate-error", { detail: error });
   }
 
   emitError(type, error) {
-    this.eventTarget.dispatchEvent(
-      new CustomEvent<LiveStateError>("livestate-error", {
-        detail: {
-          type,
-          message: this.extractMessage(error),
-        },
-      })
-    );
+    this.emit("livestate-error", {
+      detail: {
+        type,
+        message: this.extractMessage(error),
+      },
+    });
   }
 
   extractMessage(error) {
-    if (error && typeof (error == "object")) {
+    if (error && typeof error === "object") {
       const message = [error.reason, error.name, error.message].find(
         (value) => value
       );
       console.log(message);
       return message;
-    } else if (typeof error == "string") {
+    } else if (typeof error === "string") {
       return error;
     }
   }
@@ -184,34 +178,28 @@ export class LiveState implements EventTarget {
   handleChange({ state, version }) {
     this.state = state;
     this.stateVersion = version;
-    this.eventTarget.dispatchEvent(
-      new CustomEvent<LiveStateChange>("livestate-change", {
-        detail: {
-          state: this.state,
-          version: this.stateVersion,
-        },
-      })
-    );
+    this.emit("livestate-change", {
+      detail: {
+        state: this.state,
+        version: this.stateVersion,
+      },
+    });
   }
 
   handlePatch({ patch, version }) {
-    this.eventTarget.dispatchEvent(
-      new CustomEvent<LiveStatePatch>("livestate-patch", {
-        detail: { patch, version },
-      })
-    );
+    this.emit("livestate-patch", {
+      detail: { patch, version },
+    });
     if (this.versionMatches(version)) {
       const { doc, res } = applyPatch(this.state, patch, { mutate: false });
       this.state = doc;
       this.stateVersion = version;
-      this.eventTarget.dispatchEvent(
-        new CustomEvent<LiveStateChange>("livestate-change", {
-          detail: {
-            state: this.state,
-            version: this.stateVersion,
-          },
-        })
-      );
+      this.emit("livestate-change", {
+        detail: {
+          state: this.state,
+          version: this.stateVersion,
+        },
+      });
     } else {
       this.channel.push("lvs_refresh");
     }
@@ -222,19 +210,7 @@ export class LiveState implements EventTarget {
   }
 
   pushEvent(eventName, payload) {
-    this.dispatchEvent(new CustomEvent(eventName, { detail: payload }));
-  }
-
-  /** Pushes the event over the channel, adding the `lvs_evt:` prefix and using the CustomEvent
-   * detail property as the payload
-   */
-  dispatchEvent(event: Event) {
-    this.channel.push(`lvs_evt:${event.type}`, (event as CustomEvent).detail);
-    return true;
-  }
-
-  pushCustomEvent(event) {
-    this.dispatchEvent(event);
+    this.channel.push(`lvs_evt:${eventName}`, payload);
   }
 }
 
