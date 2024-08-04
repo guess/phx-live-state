@@ -1,59 +1,60 @@
-import connectElement, { ConnectOptions } from "./connectElement.js";
+import connectElement from "./connectElement.js";
 import LiveState, { LiveStateConfig } from "./LiveState.js";
-import { connectProperty } from "./connectElement";
-import { registerContext, observeContext } from 'wc-context';
-import 'reflect-metadata';
+import { registerContext, observeContext } from "wc-context";
+import "reflect-metadata";
 
 export type LiveStateDecoratorOptions = {
-
   /** The end point to connect to, should be a websocket url (ws or wss) */
-  url?: string,
+  url?: string;
 
   /** The topic for the channel */
-  topic?: string,
+  topic?: string;
 
   /** will be sent as params on channel join */
-  params?: object
+  params?: object;
 
   /** A list of property names, each of which will be updated from the state
-  * on any state chnages.
-  */
+   * on any state chnages.
+   */
   properties?: Array<string>;
 
   /** A list of attribute names, each of which will be updated from the state
-  * on any state chnages.
-  */
+   * on any state chnages.
+   */
   attributes?: Array<string>;
 
   events?: {
-    send?: Array<string>,
-    receive?: Array<string>
-  }
+    send?: Array<string>;
+    receive?: Array<string>;
+  };
 
-  /** 
-   * This will create an instance in the given scope with the specified name. For 
+  /**
+   * This will create an instance in the given scope with the specified name. For
    * example, a scope of `window` and a name of `liveState` will create `window.liveState`
-   * Instances so provided can be found by other elements using a `context` attribute 
+   * Instances so provided can be found by other elements using a `context` attribute
    * whose value matches the `name` used by the provider. This will work regardless of
    * which element occurs first (or highest) in the DOM
    */
   provide?: {
-    scope: object,
-    name: string | undefined
-  },
+    scope: object;
+    name: string | undefined;
+  };
 
   /** This will use an existing liveState instance that has been provided with
-  * the given name, rather than creating one. */
-  context?: string
+   * the given name, rather than creating one. */
+  context?: string;
+};
 
-}
-
-const connectToLiveState = (element: any, options: LiveStateDecoratorOptions) => {
+const connectToLiveState = (
+  element: any,
+  options: LiveStateDecoratorOptions
+) => {
   if (options.provide) {
     const { scope, name } = options.provide;
-    const liveState = scope[name] ? scope[name] :
-      scope[name] = buildLiveState(element, options);
-    registerContext(scope, name, liveState)
+    const liveState = scope[name]
+      ? scope[name]
+      : (scope[name] = buildLiveState(element, options));
+    registerContext(scope, name, liveState);
     connectElement(liveState, element, options as any);
   } else if (options.context) {
     observeContext(element, options.context, element, (element, liveState) => {
@@ -64,36 +65,42 @@ const connectToLiveState = (element: any, options: LiveStateDecoratorOptions) =>
     connectElement(liveState, element, options);
   }
   return element.liveState;
-}
+};
 
 export const extractConfig = (element): LiveStateConfig => {
-  const elementConfig = element._liveStateConfig ?
-    Object.keys(element._liveStateConfig).reduce((config, key) => {
-      if (element._liveStateConfig[key] instanceof Function) {
-        const configFn = element._liveStateConfig[key];
-        config[key] = configFn.apply(element);
-      } else {
-        config[key] = element._liveStateConfig[key];
-      }
-      return config;
-    }, {}) : {}
+  const elementConfig = element._liveStateConfig
+    ? Object.keys(element._liveStateConfig).reduce((config, key) => {
+        if (element._liveStateConfig[key] instanceof Function) {
+          const configFn = element._liveStateConfig[key];
+          config[key] = configFn.apply(element);
+        } else {
+          config[key] = element._liveStateConfig[key];
+        }
+        return config;
+      }, {})
+    : {};
   flattenParams(elementConfig);
   return elementConfig;
-}
+};
 
 const flattenParams = (object) => {
-  const params = Object.keys(object).filter((key) => key.startsWith('params.')).reduce((params, key) => {
-    params[key.replace('params.', '')] = object[key];
-    return params;
-  }, {});
+  const params = Object.keys(object)
+    .filter((key) => key.startsWith("params."))
+    .reduce((params, key) => {
+      params[key.replace("params.", "")] = object[key];
+      return params;
+    }, {});
   object.params = params;
-}
+};
 
-export const buildLiveState = (element: any, { url, topic, params }: LiveStateDecoratorOptions) => {
+export const buildLiveState = (
+  element: any,
+  { url, topic, params }: LiveStateDecoratorOptions
+) => {
   const elementConfig = extractConfig(element);
   const config = Object.assign({ url, topic, params }, elementConfig);
   return new LiveState(config);
-}
+};
 
 /** 
 This typescript class decorator will:
@@ -159,18 +166,18 @@ This will find an instance with the specified name (in any scope). This will be 
  */
 export function liveState(options: LiveStateDecoratorOptions) {
   return (targetClass: Function) => {
-    Reflect.defineMetadata('liveStateConfig', options, targetClass);
+    Reflect.defineMetadata("liveStateConfig", options, targetClass);
     const superConnected = targetClass.prototype.connectedCallback;
     targetClass.prototype.connectedCallback = function () {
       superConnected?.apply(this);
       connectToLiveState(this, options);
-    }
+    };
     const superDisconnected = targetClass.prototype.disconnectedCallback;
     targetClass.prototype.disconnectedCallback = function () {
-      superDisconnected?.apply(this)
+      superDisconnected?.apply(this);
       this.liveState && this.liveState.disconnect();
-    }
-  }
+    };
+  };
 }
 
 /**
@@ -198,9 +205,11 @@ This will cause the `the-url` attribute of the element to be used as the url to 
 export const liveStateConfig = (configProperty) => {
   return (proto, propertyName) => {
     proto._liveStateConfig = proto._liveStateConfig || {};
-    proto._liveStateConfig[configProperty] = function () { return this[propertyName]; }
-  }
-}
+    proto._liveStateConfig[configProperty] = function () {
+      return this[propertyName];
+    };
+  };
+};
 
 /**
 This decorator will cause a property to be updated from the state on any state change. It takes
@@ -222,15 +231,15 @@ class DecoratedElement extends LitElement {
 ```
  */
 
-export const liveStateProperty = (path? : string) => {
+export const liveStateProperty = (path?: string) => {
   return (proto, propertyName) => {
     proto._liveStateProperties = proto._liveStateProperties || [];
     if (path) {
-      proto._liveStateProperties.push({name: propertyName, path});
+      proto._liveStateProperties.push({ name: propertyName, path });
     } else {
       proto._liveStateProperties.push(propertyName);
     }
-  }
-}
+  };
+};
 
 export default liveState;

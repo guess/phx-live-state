@@ -75,7 +75,7 @@ export type LiveStatePatch = {
  * received, will be dispatched as a CustomEvent of the same name with the payload 
  * from the channel event becoming the `detail` property.
  */
-export class LiveState implements EventTarget {
+ export class LiveState implements EventTarget {
   config: LiveStateConfig;
   channel: Channel;
   socket: Socket;
